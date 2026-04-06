@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>손 모양 인식 캐릭터 반응</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 20px;
+      text-align: center;
+      letter-spacing: 2px;
+      background: linear-gradient(90deg, #a8edea, #fed6e3);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+      text-shadow: none;
+    }
+
+    .main-container {
+      display: flex;
+      gap: 40px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ── 카메라 영역 ── */
+    .camera-wrap {
+      position: relative;
+      width: 480px;
+      height: 360px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(168,237,234,0.3);
+      border: 2px solid rgba(168,237,234,0.4);
+    }
+
+    #video {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* 거울 모드 */
+    }
+
+    #output_canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      transform: scaleX(-1);
+    }
+
+    .gesture-badge {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 30px;
+      padding: 8px 22px;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      white-space: nowrap;
+      transition: all 0.3s ease;
+    }
+
+    /* ── 캐릭터 영역 ── */
+    .character-wrap {
+      width: 320px;
+      height: 380px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .character-card {
+      width: 280px;
+      height: 280px;
+      border-radius: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9rem;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+                  box-shadow 0.4s ease,
+                  background 0.5s ease;
+      animation: float 3s ease-in-out infinite;
+      user-select: none;
+    }
+
+    /* 실제 이미지 교체 시 이 클래스를 활용하세요 */
+    .character-card img.char-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      position: absolute;
+      top: 0; left: 0;
+      z-index: 3;
+    }
+
+    .character-card::before {
+      content: '';
+      position: absolute;
+      inset: -50%;
+      background: radial-gradient(circle at 60% 40%, rgba(255,255,255,0.15), transparent 60%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .char-emoji {
+      position: relative;
+      z-index: 2;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+    }
+
+    .char-label {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-align: center;
+      height: 36px;
+      transition: all 0.4s ease;
+    }
+
+    .char-sublabel {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.55);
+      letter-spacing: 1px;
+      text-align: center;
+    }
+
+    /* 애니메이션 */
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-10px); }
+    }
+    @keyframes pop {
+      0%   { transform: scale(0.7) rotate(-5deg); opacity: 0; }
+      60%  { transform: scale(1.1) rotate(2deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%     { transform: translateX(-8px) rotate(-3deg); }
+      40%     { transform: translateX(8px) rotate(3deg); }
+      60%     { transform: translateX(-5px) rotate(-2deg); }
+      80%     { transform: translateX(5px) rotate(2deg); }
+    }
+    @keyframes spin-in {
+      0%   { transform: scale(0) rotate(-180deg); opacity: 0; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    @keyframes bounce-in {
+      0%   { transform: translateY(-60px) scale(0.8); opacity: 0; }
+      60%  { transform: translateY(10px) scale(1.05); opacity: 1; }
+      100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    .anim-pop    { animation: pop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards, float 3s ease-in-out 0.5s infinite; }
+    .anim-shake  { animation: shake 0.5s ease forwards, float 3s ease-in-out 0.5s infinite; }
+    .anim-spin   { animation: spin-in 0.5s ease forwards, float 3s ease-in-out 0.5s infinite; }
+    .anim-bounce { animation: bounce-in 0.5s ease forwards, float 3s ease-in-out 0.5s infinite; }
+
+    /* 상태별 배경색 */
+    .bg-idle    { background: linear-gradient(135deg, #2c3e50, #3d5166); }
+    .bg-fist    { background: linear-gradient(135deg, #f093fb, #f5576c); }
+    .bg-open    { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+    .bg-peace   { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+    .bg-thumbup { background: linear-gradient(135deg, #fa709a, #fee140); }
+    .bg-point   { background: linear-gradient(135deg, #a18cd1, #fbc2eb); }
+    .bg-shaka   { background: linear-gradient(135deg, #ffecd2, #fcb69f); }
+    .bg-ok      { background: linear-gradient(135deg, #667eea, #764ba2); }
+
+    /* 로딩 */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,20,40,0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      gap: 20px;
+      transition: opacity 0.6s ease;
+    }
+    .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .spinner {
+      width: 60px;
+      height: 60px;
+      border: 4px solid rgba(168,237,234,0.2);
+      border-top-color: #a8edea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text { font-size: 1rem; color: rgba(255,255,255,0.7); }
+
+    /* 손 감지 안내 */
+    .hint {
+      margin-top: 14px;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.4);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+  </style>
+</head>
+<body>
+
+<!-- 로딩 화면 -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">MediaPipe 모델 로딩 중...</div>
+</div>
+
+<h1>✋ 일터문화 캠페인</h1>
+
+<div class="main-container">
+  <!-- 카메라 -->
+  <div class="camera-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="output_canvas"></canvas>
+    <div class="gesture-badge" id="gestureBadge">카메라 켜는 중...</div>
+  </div>
+
+  <!-- 캐릭터 -->
+  <div class="character-wrap">
+    <div class="character-card bg-idle" id="charCard">
+      <span class="char-emoji" id="charEmoji">🐹</span>
+    </div>
+    <div class="char-label" id="charLabel">손을 보여주세요!</div>
+    <div class="char-sublabel" id="charSub">웹캠을 향해 손을 들어보세요</div>
+  </div>
+</div>
+
+<div class="hint">
+  ✊ 주먹 &nbsp;|&nbsp; ✋ 손바닥 &nbsp;|&nbsp; ✌️ 브이 &nbsp;|&nbsp; 👍 엄지척 &nbsp;|&nbsp; ☝️ 하나 &nbsp;|&nbsp; 👌 OK
+</div>
+
+<!-- MediaPipe CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ─────────────────────────────────────────────
+//  제스처 정의
+//  각 항목: { key, emoji, label, sub, bg, anim }
+//  이미지 파일이 있으면 emoji 대신 이미지 사용
+// ─────────────────────────────────────────────
+const GESTURES = {
+  idle:    { emoji:'🐹', label:'손을 보여주세요!',  sub:'웹캠을 향해 손을 들어보세요', bg:'bg-idle',    anim:'anim-pop',    img:'idle.png'    },
+  fist:    { emoji:'💪', label:'파이팅!',           sub:'✊ 주먹 쥐기',                bg:'bg-fist',    anim:'anim-shake',  img:'fist.png'    },
+  open:    { emoji:'🙌', label:'하이파이브!',        sub:'✋ 손바닥 펼치기',            bg:'bg-open',    anim:'anim-bounce', img:'open.png'    },
+  peace:   { emoji:'✌️', label:'브이~',             sub:'✌️ 검지+중지',               bg:'bg-peace',   anim:'anim-pop',    img:'peace.png'   },
+  thumbup: { emoji:'👍', label:'최고예요!',          sub:'👍 엄지척',                  bg:'bg-thumbup', anim:'anim-spin',   img:'thumbup.png' },
+  point:   { emoji:'☝️', label:'바로 이거야!',       sub:'☝️ 검지 하나',               bg:'bg-point',   anim:'anim-bounce', img:'point.png'   },
+  ok:      { emoji:'👌', label:'오케이!',            sub:'👌 OK 사인',                 bg:'bg-ok',      anim:'anim-spin',   img:'ok.png'      },
+};
+
+// ─────────────────────────────────────────────
+//  이미지 파일 존재 여부 캐시 (비동기)
+// ─────────────────────────────────────────────
+const imageCache = {}; // key → true/false
+
+async function checkImage(src) {
+  if (imageCache[src] !== undefined) return imageCache[src];
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload  = () => { imageCache[src] = true;  resolve(true);  };
+    img.onerror = () => { resolve(false); }; // 실패는 캐싱 안 함 → 재시도 가능
+    img.src = src;
+  });
+}
+
+// ─────────────────────────────────────────────
+//  UI 업데이트
+// ─────────────────────────────────────────────
+const charCard  = document.getElementById('charCard');
+const charEmoji = document.getElementById('charEmoji');
+const charLabel = document.getElementById('charLabel');
+const charSub   = document.getElementById('charSub');
+
+let currentGesture = null;
+
+async function updateCharacter(gestureKey) {
+  if (gestureKey === currentGesture) return;
+  currentGesture = gestureKey;
+
+  const g = GESTURES[gestureKey] || GESTURES.idle;
+
+  // 배경 클래스 교체
+  charCard.className = `character-card ${g.bg}`;
+  void charCard.offsetWidth; // reflow → animation 재실행
+  charCard.classList.add(g.anim);
+
+  // 이미지 or 이모지
+  const imgSrc = `images/${g.img}`;
+  const hasImg = await checkImage(imgSrc);
+
+  // 카드에 직접 붙어있는 img 태그 재사용
+  let cardImg = charCard.querySelector('img.char-image');
+  if (!cardImg) {
+    cardImg = document.createElement('img');
+    cardImg.className = 'char-image';
+    charCard.appendChild(cardImg);
+  }
+
+  if (hasImg) {
+    cardImg.src = imgSrc;
+    cardImg.alt = g.label;
+    cardImg.style.display = '';
+    charEmoji.style.display = 'none';
+  } else {
+    cardImg.style.display = 'none';
+    charEmoji.style.display = '';
+    charEmoji.textContent = g.emoji;
+  }
+
+  charLabel.textContent = g.label;
+  charSub.textContent   = g.sub;
+}
+
+// ─────────────────────────────────────────────
+//  손가락 상태 분석 (랜드마크 기반)
+// ─────────────────────────────────────────────
+// MediaPipe Hands 랜드마크 인덱스
+// 0:손목  1-4:엄지  5-8:검지  9-12:중지  13-16:약지  17-20:새끼
+const FINGER_TIPS = [4, 8, 12, 16, 20];
+const FINGER_PIPS = [3, 6, 10, 14, 18]; // 두 번째 관절(PIP)
+
+function getFingerStates(landmarks) {
+  // 0: 접힘, 1: 펴짐
+  const fingers = [];
+
+  // 엄지: x 좌표로 비교 (좌우 반전 고려)
+  const thumbTip = landmarks[4];
+  const thumbIp  = landmarks[3];
+  const thumbMcp = landmarks[2];
+  // 손바닥 기준 벡터로 방향 판별 (간단하게 MCP와 TIP x 비교)
+  // 카메라가 반전되어 있으므로 x값 기준 조정
+  const wrist = landmarks[0];
+  const indexMcp = landmarks[5];
+  // 엄지가 검지 MCP보다 손목 방향으로 벌어져 있으면 펼침
+  const thumbExtended = Math.abs(thumbTip.x - wrist.x) > Math.abs(thumbMcp.x - wrist.x) * 0.85;
+  fingers.push(thumbExtended ? 1 : 0);
+
+  // 나머지 4 손가락: tip.y < pip.y (위쪽 = 작은 y) → 펴짐
+  for (let i = 1; i < 5; i++) {
+    fingers.push(landmarks[FINGER_TIPS[i]].y < landmarks[FINGER_PIPS[i]].y ? 1 : 0);
+  }
+  return fingers; // [thumb, index, middle, ring, pinky]
+}
+
+function classifyGesture(landmarks) {
+  const [thumb, index, middle, ring, pinky] = getFingerStates(landmarks);
+  const count = thumb + index + middle + ring + pinky;
+
+  // 주먹
+  if (count === 0) return 'fist';
+  // 손바닥 (모두 펴짐)
+  if (count === 5) return 'open';
+  // OK: 엄지+검지 원 (엄지+중지+약지+새끼 펴짐, 검지 접힘 or 엄지+검지 모두 접힘+나머지 펴짐)
+  if (thumb && !index && middle && ring && pinky) return 'ok';
+  // 엄지척 (엄지만)
+  if (thumb && !index && !middle && !ring && !pinky) return 'thumbup';
+  // 브이 (검지+중지)
+  if (!thumb && index && middle && !ring && !pinky) return 'peace';
+  // 검지 하나
+  if (!thumb && index && !middle && !ring && !pinky) return 'point';
+  // 3개 이상 펴짐 → 손바닥에 가까우면 open
+  if (count >= 3) return 'open';
+
+  return 'idle';
+}
+
+// ─────────────────────────────────────────────
+//  제스처 안정화 (노이즈 제거)
+// ─────────────────────────────────────────────
+let gestureBuffer = [];
+const BUFFER_SIZE = 8;
+
+function stabilizeGesture(raw) {
+  gestureBuffer.push(raw);
+  if (gestureBuffer.length > BUFFER_SIZE) gestureBuffer.shift();
+
+  const counts = {};
+  gestureBuffer.forEach(g => { counts[g] = (counts[g] || 0) + 1; });
+  return Object.entries(counts).sort((a,b) => b[1]-a[1])[0][0];
+}
+
+// ─────────────────────────────────────────────
+//  제스처 배지 텍스트
+// ─────────────────────────────────────────────
+const GESTURE_BADGE = {
+  idle:    '손을 보여주세요 ✋',
+  fist:    '✊ 주먹',
+  open:    '✋ 손바닥',
+  peace:   '✌️ 브이',
+  thumbup: '👍 엄지척',
+  point:   '☝️ 검지',
+  ok:      '👌 오케이',
+};
+
+// ─────────────────────────────────────────────
+//  랜드마크 그리기
+// ─────────────────────────────────────────────
+const CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],
+  [0,17]
+];
+
+function drawHand(ctx, landmarks, w, h) {
+  ctx.clearRect(0, 0, w, h);
+
+  // 연결선
+  ctx.strokeStyle = 'rgba(0,240,255,0.6)';
+  ctx.lineWidth = 2;
+  CONNECTIONS.forEach(([a, b]) => {
+    ctx.beginPath();
+    ctx.moveTo(landmarks[a].x * w, landmarks[a].y * h);
+    ctx.lineTo(landmarks[b].x * w, landmarks[b].y * h);
+    ctx.stroke();
+  });
+
+  // 관절 점
+  landmarks.forEach((lm, i) => {
+    const isTip = FINGER_TIPS.includes(i);
+    ctx.beginPath();
+    ctx.arc(lm.x * w, lm.y * h, isTip ? 7 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = isTip ? '#00f2fe' : '#a8edea';
+    ctx.fill();
+  });
+}
+
+// ─────────────────────────────────────────────
+//  MediaPipe Hands 초기화
+// ─────────────────────────────────────────────
+const video  = document.getElementById('video');
+const canvas = document.getElementById('output_canvas');
+const ctx    = canvas.getContext('2d');
+const badge  = document.getElementById('gestureBadge');
+
+const hands = new Hands({
+  locateFile: file =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.6,
+});
+
+let noHandFrames = 0;
+const NO_HAND_THRESHOLD = 20; // 약 0.6초 (30fps 기준)
+
+hands.onResults(results => {
+  const w = canvas.width  = video.videoWidth;
+  const h = canvas.height = video.videoHeight;
+
+  ctx.clearRect(0, 0, w, h);
+
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    noHandFrames = 0;
+    const landmarks = results.multiHandLandmarks[0];
+    drawHand(ctx, landmarks, w, h);
+
+    const raw    = classifyGesture(landmarks);
+    const stable = stabilizeGesture(raw);
+
+    badge.textContent = GESTURE_BADGE[stable] || raw;
+    updateCharacter(stable);
+  } else {
+    noHandFrames++;
+    if (noHandFrames > NO_HAND_THRESHOLD) {
+      gestureBuffer = [];
+      badge.textContent = '손을 보여주세요 ✋';
+      updateCharacter('idle');
+    }
+  }
+});
+
+// ─────────────────────────────────────────────
+//  카메라 시작
+// ─────────────────────────────────────────────
+const camera = new Camera(video, {
+  onFrame: async () => {
+    await hands.send({ image: video });
+  },
+  width: 640,
+  height: 480,
+  facingMode: 'user',
+});
+
+camera.start()
+  .then(() => {
+    // 로딩 완료
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.classList.add('hidden');
+    badge.textContent = '손을 보여주세요 ✋';
+    updateCharacter('idle');
+  })
+  .catch(err => {
+    console.error(err);
+    document.querySelector('.loading-text').textContent =
+      '카메라 접근 실패: ' + err.message;
+  });
+</script>
+</body>
+</html>

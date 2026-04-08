@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>손 모양 인식 캐릭터 반응</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 20px;
+      text-align: center;
+      letter-spacing: 2px;
+      background: linear-gradient(90deg, #a8edea, #fed6e3);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+      text-shadow: none;
+    }
+
+    .main-container {
+      display: flex;
+      gap: 40px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ── 카메라 영역 ── */
+    .camera-wrap {
+      position: relative;
+      width: 480px;
+      height: 360px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(168,237,234,0.3);
+      border: 2px solid rgba(168,237,234,0.4);
+    }
+
+    #video {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* 거울 모드 */
+    }
+
+    #output_canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      transform: scaleX(-1);
+    }
+
+    .gesture-badge {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 30px;
+      padding: 8px 22px;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      white-space: nowrap;
+      transition: all 0.3s ease;
+    }
+
+    /* ── 캐릭터 영역 ── */
+    .character-wrap {
+      width: 320px;
+      height: 380px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .character-card {
+      width: 280px;
+      height: 280px;
+      border-radius: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9rem;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+                  box-shadow 0.4s ease,
+                  background 0.5s ease;
+      animation: float 3s ease-in-out infinite;
+      user-select: none;
+    }
+
+    /* 실제 이미지 교체 시 이 클래스를 활용하세요 */
+    .character-card img.char-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      position: absolute;
+      top: 0; left: 0;
+      z-index: 3;
+    }
+
+    .character-card::before {
+      content: '';
+      position: absolute;
+      inset: -50%;
+      background: radial-gradient(circle at 60% 40%, rgba(255,255,255,0.15), transparent 60%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .char-emoji {
+      position: relative;
+      z-index: 2;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+    }
+
+    .char-label {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-align: center;
+      height: 36px;
+      transition: all 0.4s ease;
+    }
+
+    .char-sublabel {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.55);
+      letter-spacing: 1px;
+      text-align: center;
+    }
+
+    /* 애니메이션 */
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-10px); }
+    }
+    @keyframes pop {
+      0%   { transform: scale(0.7) rotate(-5deg); opacity: 0; }
+      60%  { transform: scale(1.1) rotate(2deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%     { transform: translateX(-8px) rotate(-3deg); }
+      40%     { transform: translateX(8px) rotate(3deg); }
+      60%     { transform: translateX(-5px) rotate(-2deg); }
+      80%     { transform: translateX(5px) rotate(2deg); }
+    }
+    @keyframes spin-in {
+      0%   { transform: scale(0) rotate(-180deg); opacity: 0; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    @keyframes bounce-in {
+      0%   { transform: translateY(-60px) scale(0.8); opacity: 0; }
+      60%  { transform: translateY(10px) scale(1.05); opacity: 1; }
+      100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    .anim-pop    { animation: pop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards, float 3s ease-in-out 0.5s infinite; }
+    .anim-shake  { animation: shake 0.5s ease forwards, float 3s ease-in-out 0.5s infinite; }
+    .anim-spin   { animation: spin-in 0.5s ease forwards, float 3s ease-in-out 0.5s infinite; }
+    .anim-bounce { animation: bounce-in 0.5s ease forwards, float 3s ease-in-out 0.5s infinite; }
+
+    /* 상태별 배경색 */
+    .bg-idle    { background: linear-gradient(135deg, #2c3e50, #3d5166); }
+    .bg-fist    { background: linear-gradient(135deg, #f093fb, #f5576c); }
+    .bg-open    { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+    .bg-peace   { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+    .bg-thumbup { background: linear-gradient(135deg, #fa709a, #fee140); }
+    .bg-point   { background: linear-gradient(135deg, #a18cd1, #fbc2eb); }
+    .bg-shaka   { background: linear-gradient(135deg, #ffecd2, #fcb69f); }
+    .bg-ok      { background: linear-gradient(135deg, #667eea, #764ba2); }
+
+    /* 로딩 */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,20,40,0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      gap: 20px;
+      transition: opacity 0.6s ease;
+    }
+    .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .spinner {
+      width: 60px;
+      height: 60px;
+      border: 4px solid rgba(168,237,234,0.2);
+      border-top-color: #a8edea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text { font-size: 1rem; color: rgba(255,255,255,0.7); }
+
+    /* 손 감지 안내 */
+    .hint {
+      margin-top: 14px;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.4);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* ── 엽서 모달 ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.78);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .modal-overlay.active { opacity: 1; pointer-events: all; }
+
+    .modal-box {
+      background: linear-gradient(145deg, #1e2a45, #131e35);
+      border: 1px solid rgba(168,237,234,0.35);
+      border-radius: 22px;
+      padding: 28px 30px 24px;
+      width: 560px;
+      max-width: 96vw;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: modal-pop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
+    }
+    @keyframes modal-pop {
+      from { transform: scale(0.88) translateY(20px); opacity: 0; }
+      to   { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    .modal-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      text-align: center;
+      background: linear-gradient(90deg, #a8edea, #fed6e3);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+    }
+
+    .modal-previews {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .preview-webcam {
+      width: 260px;
+      height: 195px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(168,237,234,0.3);
+      flex-shrink: 0;
+      background: #000;
+    }
+    .preview-webcam canvas { width: 100%; height: 100%; display: block; object-fit: cover; }
+
+    .preview-char {
+      width: 150px;
+      height: 150px;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.2);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 4.5rem;
+    }
+    .preview-char img { width: 100%; height: 100%; object-fit: contain; }
+
+    .modal-textarea {
+      width: 100%;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(168,237,234,0.25);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+      padding: 12px 14px;
+      resize: none;
+      outline: none;
+      line-height: 1.6;
+      height: 80px;
+      transition: border-color 0.2s;
+    }
+    .modal-textarea:focus { border-color: rgba(168,237,234,0.65); }
+    .modal-textarea::placeholder { color: rgba(255,255,255,0.28); }
+
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .btn-cancel {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.65);
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-cancel:hover { background: rgba(255,255,255,0.14); }
+    .btn-create {
+      background: linear-gradient(135deg, #a8edea, #6dd8d4);
+      border: none;
+      color: #1a1a2e;
+      border-radius: 10px;
+      padding: 10px 22px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-create:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(168,237,234,0.4); }
+    .btn-create:active { transform: translateY(0); }
+
+    .modal-hint {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.28);
+      text-align: center;
+    }
+
+    /* ── 엽서 결과 화면 ── */
+    .modal-box-result { width: 700px; }
+    .modal-result {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(168,237,234,0.3);
+      line-height: 0;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    .modal-result img { width: 100%; height: auto; display: block; }
+    .btn-download { text-decoration: none; display: inline-block; }
+
+  </style>
+</head>
+<body>
+
+<!-- 로딩 화면 -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">MediaPipe 모델 로딩 중...</div>
+</div>
+
+<h1>✋ 일터문화 캠페인</h1>
+
+<div class="main-container">
+  <!-- 카메라 -->
+  <div class="camera-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="output_canvas"></canvas>
+    <div class="gesture-badge" id="gestureBadge">카메라 켜는 중...</div>
+  </div>
+
+  <!-- 캐릭터 -->
+  <div class="character-wrap">
+    <div class="character-card bg-idle" id="charCard">
+      <span class="char-emoji" id="charEmoji">🐹</span>
+    </div>
+    <div class="char-label" id="charLabel">손을 보여주세요!</div>
+    <div class="char-sublabel" id="charSub">웹캠을 향해 손을 들어보세요</div>
+  </div>
+</div>
+
+<div class="hint">
+  ✊ 주먹 &nbsp;|&nbsp; ✋ 손바닥 &nbsp;|&nbsp; ✌️ 브이 &nbsp;|&nbsp; 👍 엄지척 &nbsp;|&nbsp; ☝️ 하나 &nbsp;|&nbsp; 👌 OK
+  <br><span style="color:rgba(168,237,234,0.5); margin-top:6px; display:inline-block;">📸 Space 키를 누르면 엽서를 만들 수 있어요!</span>
+</div>
+
+<!-- 엽서 모달 -->
+<div class="modal-overlay" id="postcardModal">
+  <!-- Step 1: 입력 -->
+  <div class="modal-box" id="modalStep1">
+    <div class="modal-title">📸 순간 포착!</div>
+    <div class="modal-previews">
+      <div class="preview-webcam"><canvas id="previewCanvas"></canvas></div>
+      <div class="preview-char" id="previewChar"></div>
+    </div>
+    <textarea class="modal-textarea" id="messageInput"
+      placeholder="격려의 한마디를 적어주세요... ✍️" maxlength="80"></textarea>
+    <div class="modal-buttons">
+      <button class="btn-cancel" id="btnCancel">취소</button>
+      <button class="btn-create" id="btnCreate">나만의 엽서 만들기 🎨</button>
+    </div>
+    <div class="modal-hint">Esc 또는 바깥 클릭으로 닫기 &nbsp;|&nbsp; Ctrl+Enter로 생성</div>
+  </div>
+  <!-- Step 2: 결과 미리보기 -->
+  <div class="modal-box modal-box-result" id="modalStep2" style="display:none">
+    <div class="modal-title">🎉 나만의 엽서 완성!</div>
+    <div class="modal-result">
+      <img id="postcardImg" alt="엽서 미리보기">
+    </div>
+    <div class="modal-buttons" style="margin-top:6px">
+      <button class="btn-cancel" id="btnBack">← 다시 만들기</button>
+      <a class="btn-create btn-download" id="btnDownload">⬇ 저장하기</a>
+    </div>
+  </div>
+</div>
+
+<!-- MediaPipe CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ─────────────────────────────────────────────
+//  제스처 정의
+//  각 항목: { key, emoji, label, sub, bg, anim }
+//  이미지 파일이 있으면 emoji 대신 이미지 사용
+// ─────────────────────────────────────────────
+const GESTURES = {
+  idle:    { emoji:'🐹', label:'손을 보여주세요!',  sub:'웹캠을 향해 손을 들어보세요', bg:'bg-idle',    anim:'anim-pop',    img:'idle.png'    },
+  fist:    { emoji:'💪', label:'파이팅!',           sub:'✊ 주먹 쥐기',                bg:'bg-fist',    anim:'anim-shake',  img:'fist.png'    },
+  open:    { emoji:'🙌', label:'하이파이브!',        sub:'✋ 손바닥 펼치기',            bg:'bg-open',    anim:'anim-bounce', img:'open.png'    },
+  peace:   { emoji:'✌️', label:'브이~',             sub:'✌️ 검지+중지',               bg:'bg-peace',   anim:'anim-pop',    img:'peace.png'   },
+  thumbup: { emoji:'👍', label:'최고예요!',          sub:'👍 엄지척',                  bg:'bg-thumbup', anim:'anim-spin',   img:'thumbup.png' },
+  point:   { emoji:'☝️', label:'바로 이거야!',       sub:'☝️ 검지 하나',               bg:'bg-point',   anim:'anim-bounce', img:'point.png'   },
+  ok:      { emoji:'👌', label:'오케이!',            sub:'👌 OK 사인',                 bg:'bg-ok',      anim:'anim-spin',   img:'ok.png'      },
+};
+
+// ─────────────────────────────────────────────
+//  이미지 파일 존재 여부 캐시 (비동기)
+// ─────────────────────────────────────────────
+const imageCache = {}; // key → true/false
+
+async function checkImage(src) {
+  if (imageCache[src] !== undefined) return imageCache[src];
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload  = () => { imageCache[src] = true;  resolve(true);  };
+    img.onerror = () => { resolve(false); }; // 실패는 캐싱 안 함 → 재시도 가능
+    img.src = src;
+  });
+}
+
+// ─────────────────────────────────────────────
+//  UI 업데이트
+// ─────────────────────────────────────────────
+const charCard  = document.getElementById('charCard');
+const charEmoji = document.getElementById('charEmoji');
+const charLabel = document.getElementById('charLabel');
+const charSub   = document.getElementById('charSub');
+
+let currentGesture = null;
+
+async function updateCharacter(gestureKey) {
+  if (gestureKey === currentGesture) return;
+  currentGesture = gestureKey;
+
+  const g = GESTURES[gestureKey] || GESTURES.idle;
+
+  // 배경 클래스 교체
+  charCard.className = `character-card ${g.bg}`;
+  void charCard.offsetWidth; // reflow → animation 재실행
+  charCard.classList.add(g.anim);
+
+  // 이미지 or 이모지
+  const imgSrc = `images/${g.img}`;
+  const hasImg = await checkImage(imgSrc);
+
+  // 카드에 직접 붙어있는 img 태그 재사용
+  let cardImg = charCard.querySelector('img.char-image');
+  if (!cardImg) {
+    cardImg = document.createElement('img');
+    cardImg.className = 'char-image';
+    charCard.appendChild(cardImg);
+  }
+
+  if (hasImg) {
+    cardImg.src = imgSrc;
+    cardImg.alt = g.label;
+    cardImg.style.display = '';
+    charEmoji.style.display = 'none';
+  } else {
+    cardImg.style.display = 'none';
+    charEmoji.style.display = '';
+    charEmoji.textContent = g.emoji;
+  }
+
+  charLabel.textContent = g.label;
+  charSub.textContent   = g.sub;
+}
+
+// ─────────────────────────────────────────────
+//  손가락 상태 분석 (랜드마크 기반)
+// ─────────────────────────────────────────────
+// MediaPipe Hands 랜드마크 인덱스
+// 0:손목  1-4:엄지  5-8:검지  9-12:중지  13-16:약지  17-20:새끼
+const FINGER_TIPS = [4, 8, 12, 16, 20];
+const FINGER_PIPS = [3, 6, 10, 14, 18]; // 두 번째 관절(PIP)
+
+function getFingerStates(landmarks) {
+  // 0: 접힘, 1: 펴짐
+  const fingers = [];
+
+  // 엄지: x 좌표로 비교 (좌우 반전 고려)
+  const thumbTip = landmarks[4];
+  const thumbIp  = landmarks[3];
+  const thumbMcp = landmarks[2];
+  // 손바닥 기준 벡터로 방향 판별 (간단하게 MCP와 TIP x 비교)
+  // 카메라가 반전되어 있으므로 x값 기준 조정
+  const wrist = landmarks[0];
+  const indexMcp = landmarks[5];
+  // 엄지가 검지 MCP보다 손목 방향으로 벌어져 있으면 펼침
+  const thumbExtended = Math.abs(thumbTip.x - wrist.x) > Math.abs(thumbMcp.x - wrist.x) * 0.85;
+  fingers.push(thumbExtended ? 1 : 0);
+
+  // 나머지 4 손가락: tip.y < pip.y (위쪽 = 작은 y) → 펴짐
+  for (let i = 1; i < 5; i++) {
+    fingers.push(landmarks[FINGER_TIPS[i]].y < landmarks[FINGER_PIPS[i]].y ? 1 : 0);
+  }
+  return fingers; // [thumb, index, middle, ring, pinky]
+}
+
+function classifyGesture(landmarks) {
+  const [thumb, index, middle, ring, pinky] = getFingerStates(landmarks);
+  const count = thumb + index + middle + ring + pinky;
+
+  // 주먹
+  if (count === 0) return 'fist';
+  // 손바닥 (모두 펴짐)
+  if (count === 5) return 'open';
+  // OK: 엄지+검지 원 (엄지+중지+약지+새끼 펴짐, 검지 접힘 or 엄지+검지 모두 접힘+나머지 펴짐)
+  if (thumb && !index && middle && ring && pinky) return 'ok';
+  // 엄지척 (엄지만)
+  if (thumb && !index && !middle && !ring && !pinky) return 'thumbup';
+  // 브이 (검지+중지)
+  if (!thumb && index && middle && !ring && !pinky) return 'peace';
+  // 검지 하나
+  if (!thumb && index && !middle && !ring && !pinky) return 'point';
+  // 3개 이상 펴짐 → 손바닥에 가까우면 open
+  if (count >= 3) return 'open';
+
+  return 'idle';
+}
+
+// ─────────────────────────────────────────────
+//  제스처 안정화 (노이즈 제거)
+// ─────────────────────────────────────────────
+let gestureBuffer = [];
+const BUFFER_SIZE = 8;
+
+function stabilizeGesture(raw) {
+  gestureBuffer.push(raw);
+  if (gestureBuffer.length > BUFFER_SIZE) gestureBuffer.shift();
+
+  const counts = {};
+  gestureBuffer.forEach(g => { counts[g] = (counts[g] || 0) + 1; });
+  return Object.entries(counts).sort((a,b) => b[1]-a[1])[0][0];
+}
+
+// ─────────────────────────────────────────────
+//  제스처 배지 텍스트
+// ─────────────────────────────────────────────
+const GESTURE_BADGE = {
+  idle:    '손을 보여주세요 ✋',
+  fist:    '✊ 주먹',
+  open:    '✋ 손바닥',
+  peace:   '✌️ 브이',
+  thumbup: '👍 엄지척',
+  point:   '☝️ 검지',
+  ok:      '👌 오케이',
+};
+
+// ─────────────────────────────────────────────
+//  랜드마크 그리기
+// ─────────────────────────────────────────────
+const CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],
+  [0,17]
+];
+
+function drawHand(ctx, landmarks, w, h) {
+  ctx.clearRect(0, 0, w, h);
+
+  // 연결선
+  ctx.strokeStyle = 'rgba(0,240,255,0.6)';
+  ctx.lineWidth = 2;
+  CONNECTIONS.forEach(([a, b]) => {
+    ctx.beginPath();
+    ctx.moveTo(landmarks[a].x * w, landmarks[a].y * h);
+    ctx.lineTo(landmarks[b].x * w, landmarks[b].y * h);
+    ctx.stroke();
+  });
+
+  // 관절 점
+  landmarks.forEach((lm, i) => {
+    const isTip = FINGER_TIPS.includes(i);
+    ctx.beginPath();
+    ctx.arc(lm.x * w, lm.y * h, isTip ? 7 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = isTip ? '#00f2fe' : '#a8edea';
+    ctx.fill();
+  });
+}
+
+// ─────────────────────────────────────────────
+//  MediaPipe Hands 초기화
+// ─────────────────────────────────────────────
+const video  = document.getElementById('video');
+const canvas = document.getElementById('output_canvas');
+const ctx    = canvas.getContext('2d');
+const badge  = document.getElementById('gestureBadge');
+
+const hands = new Hands({
+  locateFile: file =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.6,
+});
+
+let noHandFrames = 0;
+const NO_HAND_THRESHOLD = 20; // 약 0.6초 (30fps 기준)
+
+hands.onResults(results => {
+  const w = canvas.width  = video.videoWidth;
+  const h = canvas.height = video.videoHeight;
+
+  ctx.clearRect(0, 0, w, h);
+
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    noHandFrames = 0;
+    const landmarks = results.multiHandLandmarks[0];
+    lastLandmarks = landmarks;
+    drawHand(ctx, landmarks, w, h);
+
+    const raw    = classifyGesture(landmarks);
+    const stable = stabilizeGesture(raw);
+
+    badge.textContent = GESTURE_BADGE[stable] || raw;
+    updateCharacter(stable);
+  } else {
+    noHandFrames++;
+    if (noHandFrames > NO_HAND_THRESHOLD) {
+      lastLandmarks = null;
+      gestureBuffer = [];
+      badge.textContent = '손을 보여주세요 ✋';
+      updateCharacter('idle');
+    }
+  }
+});
+
+// ─────────────────────────────────────────────
+//  카메라 시작
+// ─────────────────────────────────────────────
+const camera = new Camera(video, {
+  onFrame: async () => {
+    await hands.send({ image: video });
+  },
+  width: 640,
+  height: 480,
+  facingMode: 'user',
+});
+
+// ─────────────────────────────────────────────
+//  엽서 기능
+// ─────────────────────────────────────────────
+let lastLandmarks = null;
+let capturedFrame  = null;
+
+const BG_COLORS = {
+  'bg-idle':    ['#2c3e50', '#3d5166'],
+  'bg-fist':    ['#f093fb', '#f5576c'],
+  'bg-open':    ['#4facfe', '#00f2fe'],
+  'bg-peace':   ['#43e97b', '#38f9d7'],
+  'bg-thumbup': ['#fa709a', '#fee140'],
+  'bg-point':   ['#a18cd1', '#fbc2eb'],
+  'bg-shaka':   ['#ffecd2', '#fcb69f'],
+  'bg-ok':      ['#667eea', '#764ba2'],
+};
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y,     x + w, y + r,     r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h,     x, y + h - r,     r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y,         x + r, y,         r);
+  ctx.closePath();
+}
+
+function wrapTextLines(ctx, text, maxWidth) {
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+// 웹캠 + 랜드마크 캡처 (CSS 미러 반영)
+// ImageCapture.grabFrame() 사용 → canvas taint 방지
+async function captureCurrentFrame() {
+  const w = video.videoWidth  || 640;
+  const h = video.videoHeight || 480;
+  const cap = document.createElement('canvas');
+  cap.width  = w;
+  cap.height = h;
+  const c = cap.getContext('2d', { willReadFrequently: true });
+
+  // ImageCapture API로 웹캠 프레임 획득 (toDataURL 보안 제한 우회)
+  let drawn = false;
+  try {
+    const track = video.srcObject && video.srcObject.getVideoTracks()[0];
+    if (track && typeof ImageCapture !== 'undefined') {
+      const ic     = new ImageCapture(track);
+      const bitmap = await ic.grabFrame(); // ImageBitmap → canvas 오염 없음
+      c.save();
+      c.translate(w, 0);
+      c.scale(-1, 1);
+      c.drawImage(bitmap, 0, 0, w, h);
+      c.restore();
+      bitmap.close();
+      drawn = true;
+    }
+  } catch (_) { /* 미지원 브라우저 폴백 */ }
+
+  if (!drawn) {
+    // 폴백: 직접 drawImage (HTTPS 환경에서는 문제 없음)
+    c.save();
+    c.translate(w, 0);
+    c.scale(-1, 1);
+    c.drawImage(video, 0, 0, w, h);
+    c.restore();
+  }
+
+  // 랜드마크 오버레이 (x 미러 좌표)
+  if (lastLandmarks) {
+    c.strokeStyle = 'rgba(0,240,255,0.75)';
+    c.lineWidth = 2;
+    CONNECTIONS.forEach(([a, b]) => {
+      c.beginPath();
+      c.moveTo((1 - lastLandmarks[a].x) * w, lastLandmarks[a].y * h);
+      c.lineTo((1 - lastLandmarks[b].x) * w, lastLandmarks[b].y * h);
+      c.stroke();
+    });
+    lastLandmarks.forEach((lm, i) => {
+      const isTip = FINGER_TIPS.includes(i);
+      c.beginPath();
+      c.arc((1 - lm.x) * w, lm.y * h, isTip ? 7 : 4, 0, Math.PI * 2);
+      c.fillStyle = isTip ? '#00f2fe' : '#a8edea';
+      c.fill();
+    });
+  }
+  return cap;
+}
+
+// 모달 열기
+async function openPostcardModal() {
+  capturedFrame = await captureCurrentFrame();
+
+  // 웹캠 미리보기
+  const pCanvas = document.getElementById('previewCanvas');
+  pCanvas.width  = capturedFrame.width;
+  pCanvas.height = capturedFrame.height;
+  pCanvas.getContext('2d').drawImage(capturedFrame, 0, 0);
+
+  // 캐릭터 미리보기
+  const pChar = document.getElementById('previewChar');
+  const g = GESTURES[currentGesture] || GESTURES.idle;
+  const [c1, c2] = BG_COLORS[g.bg] || ['#2c3e50', '#3d5166'];
+  pChar.style.background = `linear-gradient(135deg, ${c1}, ${c2})`;
+  const cardImg = charCard.querySelector('img.char-image');
+  if (cardImg && cardImg.style.display !== 'none' && cardImg.src) {
+    pChar.innerHTML = `<img src="${cardImg.src}" alt="${g.label}" style="width:100%;height:100%;object-fit:contain;">`;
+  } else {
+    pChar.innerHTML = `<span>${g.emoji}</span>`;
+  }
+
+  document.getElementById('messageInput').value = '';
+  document.getElementById('postcardModal').classList.add('active');
+  setTimeout(() => document.getElementById('messageInput').focus(), 120);
+}
+
+function closePostcardModal() {
+  document.getElementById('postcardModal').classList.remove('active');
+  // step1으로 초기화
+  document.getElementById('modalStep1').style.display = '';
+  document.getElementById('modalStep2').style.display = 'none';
+}
+
+// 이벤트 연결
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !e.repeat) {
+    // 텍스트 입력 중에는 무시 (띄어쓰기 허용)
+    if (document.activeElement && document.activeElement.id === 'messageInput') return;
+    e.preventDefault();
+    openPostcardModal();
+  }
+  if (e.code === 'Escape') closePostcardModal();
+});
+document.getElementById('btnCancel').addEventListener('click', closePostcardModal);
+document.getElementById('btnBack').addEventListener('click', () => {
+  document.getElementById('modalStep2').style.display = 'none';
+  document.getElementById('modalStep1').style.display = '';
+});
+document.getElementById('postcardModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closePostcardModal();
+});
+document.getElementById('messageInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) document.getElementById('btnCreate').click();
+});
+document.getElementById('btnCreate').addEventListener('click', () => {
+  generateAndDownload(document.getElementById('messageInput').value.trim());
+});
+
+// 엽서 생성 & 다운로드
+function generateAndDownload(message) {
+
+  const PW = 1000, PH = 640;
+  const pc = document.createElement('canvas');
+  pc.width = PW; pc.height = PH;
+  const c = pc.getContext('2d');
+
+  // ── 배경 ──
+  const bgGrad = c.createLinearGradient(0, 0, PW, PH);
+  bgGrad.addColorStop(0,   '#0d1b2a');
+  bgGrad.addColorStop(0.5, '#162040');
+  bgGrad.addColorStop(1,   '#0a1628');
+  c.fillStyle = bgGrad;
+  c.fillRect(0, 0, PW, PH);
+
+  // 외곽 테두리
+  c.strokeStyle = 'rgba(168,237,234,0.5)';
+  c.lineWidth = 2;
+  roundRectPath(c, 14, 14, PW-28, PH-28, 22);
+  c.stroke();
+  c.strokeStyle = 'rgba(168,237,234,0.13)';
+  c.lineWidth = 1;
+  roundRectPath(c, 24, 24, PW-48, PH-48, 15);
+  c.stroke();
+
+  // ── 헤더 ──
+  const titleGrad = c.createLinearGradient(50, 0, 360, 0);
+  titleGrad.addColorStop(0, '#a8edea');
+  titleGrad.addColorStop(1, '#fed6e3');
+  c.fillStyle = titleGrad;
+  c.font = 'bold 26px "Segoe UI","Malgun Gothic",sans-serif';
+  c.textAlign = 'left';
+  c.fillText('✋ 일터문화 캠페인', 50, 66);
+
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`;
+  c.font = '14px "Segoe UI",sans-serif';
+  c.fillStyle = 'rgba(255,255,255,0.45)';
+  c.textAlign = 'right';
+  c.fillText(dateStr, PW-50, 66);
+
+  c.strokeStyle = 'rgba(168,237,234,0.3)';
+  c.lineWidth = 1;
+  c.beginPath(); c.moveTo(50, 80); c.lineTo(PW-50, 80); c.stroke();
+
+  // ── 손 모양 인식 영역 (랜드마크 스켈레톤 직접 렌더링 — canvas taint 없음) ──
+  const camX = 40, camY = 96, camW = 460, camH = 345;
+
+  // 배경
+  c.save();
+  roundRectPath(c, camX, camY, camW, camH, 14);
+  c.clip();
+  const camBg = c.createLinearGradient(camX, camY, camX + camW, camY + camH);
+  camBg.addColorStop(0, '#060e1a');
+  camBg.addColorStop(1, '#0d1e35');
+  c.fillStyle = camBg;
+  c.fillRect(camX, camY, camW, camH);
+
+  // 미세 격자 패턴
+  c.strokeStyle = 'rgba(168,237,234,0.04)';
+  c.lineWidth = 1;
+  for (let gx = camX; gx <= camX + camW; gx += 30) {
+    c.beginPath(); c.moveTo(gx, camY); c.lineTo(gx, camY + camH); c.stroke();
+  }
+  for (let gy = camY; gy <= camY + camH; gy += 30) {
+    c.beginPath(); c.moveTo(camX, gy); c.lineTo(camX + camW, gy); c.stroke();
+  }
+
+  // 랜드마크 스켈레톤 (lastLandmarks 좌표는 0~1 정규화값, x는 미러)
+  if (lastLandmarks) {
+    // 연결선
+    c.strokeStyle = 'rgba(0,240,255,0.65)';
+    c.lineWidth = 2.5;
+    c.lineJoin = 'round';
+    CONNECTIONS.forEach(([a, b]) => {
+      c.beginPath();
+      c.moveTo(camX + (1 - lastLandmarks[a].x) * camW, camY + lastLandmarks[a].y * camH);
+      c.lineTo(camX + (1 - lastLandmarks[b].x) * camW, camY + lastLandmarks[b].y * camH);
+      c.stroke();
+    });
+    // 관절
+    lastLandmarks.forEach((lm, i) => {
+      const isTip = FINGER_TIPS.includes(i);
+      const r = isTip ? 9 : 5;
+      // 글로우 효과
+      c.beginPath();
+      c.arc(camX + (1 - lm.x) * camW, camY + lm.y * camH, r + 4, 0, Math.PI * 2);
+      c.fillStyle = isTip ? 'rgba(0,242,254,0.18)' : 'rgba(168,237,234,0.12)';
+      c.fill();
+      // 메인 점
+      c.beginPath();
+      c.arc(camX + (1 - lm.x) * camW, camY + lm.y * camH, r, 0, Math.PI * 2);
+      c.fillStyle = isTip ? '#00f2fe' : '#a8edea';
+      c.fill();
+    });
+  } else {
+    // 손 없을 때 플레이스홀더
+    c.font = '72px serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = 'rgba(168,237,234,0.12)';
+    c.fillText('✋', camX + camW / 2, camY + camH / 2);
+    c.textBaseline = 'alphabetic';
+  }
+
+  // "손 모양 인식" 레이블
+  c.font = '13px "Segoe UI","Malgun Gothic",sans-serif';
+  c.fillStyle = 'rgba(168,237,234,0.45)';
+  c.textAlign = 'center';
+  c.fillText('손 모양 인식', camX + camW / 2, camY + camH - 12);
+  c.restore();
+
+  c.strokeStyle = 'rgba(168,237,234,0.45)';
+  c.lineWidth = 2;
+  roundRectPath(c, camX, camY, camW, camH, 14);
+  c.stroke();
+
+  // ── 캐릭터 박스 ──
+  const g = GESTURES[currentGesture] || GESTURES.idle;
+  const [col1, col2] = BG_COLORS[g.bg] || ['#2c3e50', '#3d5166'];
+  const charBoxSize = 270;
+  const rightAreaX  = 520;
+  const rightAreaW  = PW - rightAreaX - 40;
+  const charX = rightAreaX + Math.floor((rightAreaW - charBoxSize) / 2);
+  const charY = camY + Math.floor((camH - charBoxSize) / 2);
+
+  const charBg = c.createLinearGradient(charX, charY, charX + charBoxSize, charY + charBoxSize);
+  charBg.addColorStop(0, col1);
+  charBg.addColorStop(1, col2);
+
+  c.save();
+  roundRectPath(c, charX, charY, charBoxSize, charBoxSize, 22);
+  c.clip();
+  c.fillStyle = charBg;
+  c.fillRect(charX, charY, charBoxSize, charBoxSize);
+
+  // file:// 프로토콜에서는 로컬 이미지도 canvas를 오염시켜 toDataURL() 차단
+  // HTTPS 배포 환경에서는 동일 출처 이미지이므로 안전하게 사용 가능
+  const cardImg = charCard.querySelector('img.char-image');
+  const canDrawImg = location.protocol !== 'file:'
+    && cardImg && cardImg.style.display !== 'none'
+    && cardImg.complete && cardImg.naturalWidth;
+
+  if (canDrawImg) {
+    c.drawImage(cardImg, charX, charY, charBoxSize, charBoxSize);
+  } else {
+    c.font = `${Math.floor(charBoxSize * 0.52)}px serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = '#fff';
+    c.fillText(g.emoji, charX + charBoxSize / 2, charY + charBoxSize / 2);
+    c.textBaseline = 'alphabetic';
+  }
+  c.restore();
+
+  c.strokeStyle = 'rgba(255,255,255,0.28)';
+  c.lineWidth = 2;
+  roundRectPath(c, charX, charY, charBoxSize, charBoxSize, 22);
+  c.stroke();
+
+  // 캐릭터 레이블
+  c.font = 'bold 18px "Segoe UI","Malgun Gothic",sans-serif';
+  c.fillStyle = 'rgba(255,255,255,0.85)';
+  c.textAlign = 'center';
+  c.fillText(g.label, charX + charBoxSize / 2, charY + charBoxSize + 30);
+
+  // ── 구분선 ──
+  const divY = camY + camH + 18;
+  c.strokeStyle = 'rgba(168,237,234,0.22)';
+  c.lineWidth = 1;
+  c.beginPath(); c.moveTo(50, divY); c.lineTo(PW-50, divY); c.stroke();
+
+  // ── 메시지 ──
+  if (message) {
+    // 장식 따옴표
+    c.font = 'bold 52px Georgia,serif';
+    c.fillStyle = 'rgba(168,237,234,0.22)';
+    c.textAlign = 'left';
+    c.fillText('\u201C', 50, divY + 68);
+
+    c.font = 'italic 22px "Segoe UI","Malgun Gothic",Georgia,serif';
+    c.fillStyle = '#ffffff';
+    c.textAlign = 'center';
+    const lines = wrapTextLines(c, message, PW - 180);
+    const lineH = 34;
+    const msgY  = divY + 54;
+    lines.forEach((line, i) => c.fillText(line, PW / 2, msgY + i * lineH));
+
+    c.font = 'bold 52px Georgia,serif';
+    c.fillStyle = 'rgba(168,237,234,0.22)';
+    c.textAlign = 'right';
+    c.fillText('\u201D', PW - 50, msgY + (lines.length - 1) * lineH + 12);
+  }
+
+  // ── 푸터 ──
+  c.strokeStyle = 'rgba(168,237,234,0.15)';
+  c.lineWidth = 1;
+  c.beginPath(); c.moveTo(50, PH-44); c.lineTo(PW-50, PH-44); c.stroke();
+  c.font = '12px "Segoe UI",sans-serif';
+  c.fillStyle = 'rgba(255,255,255,0.22)';
+  c.textAlign = 'center';
+  c.fillText('일터문화 캠페인 · 손 모양 인식 앱', PW / 2, PH - 22);
+
+  // ── 미리보기 & 다운로드 버튼 연결 ──
+  try {
+    const dataUrl = pc.toDataURL('image/png');
+    document.getElementById('postcardImg').src = dataUrl;
+    const dlBtn = document.getElementById('btnDownload');
+    dlBtn.href     = dataUrl;
+    dlBtn.download = `엽서_${dateStr.replace(/\./g, '')}.png`;
+
+    // step1 숨기고 step2 표시
+    document.getElementById('modalStep1').style.display = 'none';
+    document.getElementById('modalStep2').style.display = '';
+  } catch (err) {
+    console.error('엽서 생성 오류:', err);
+    alert('엽서 생성에 실패했습니다.\n' + err.message);
+  }
+}
+
+camera.start()
+  .then(() => {
+    // 로딩 완료
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.classList.add('hidden');
+    badge.textContent = '손을 보여주세요 ✋';
+    updateCharacter('idle');
+  })
+  .catch(err => {
+    console.error(err);
+    document.querySelector('.loading-text').textContent =
+      '카메라 접근 실패: ' + err.message;
+  });
+</script>
+</body>
+</html>
